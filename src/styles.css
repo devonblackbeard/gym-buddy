@@ -1060,3 +1060,86 @@ p {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Steps synced from Apple Health (Workout screen) */
+.steps-card {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+}
+
+.steps-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.steps-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--accent);
+  flex: none;
+}
+
+.steps-count {
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.steps-label {
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.steps-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 52px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps-bars li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 100%;
+  width: 12px;
+}
+
+.steps-bars .track {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+}
+
+.steps-bars .bar {
+  width: 100%;
+  border-radius: 4px;
+  background: var(--surface-3);
+}
+
+.steps-bars .current .bar {
+  background: var(--accent);
+}
+
+.steps-bars .day {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+  line-height: 1;
+}
+
+.steps-bars .current .day {
+  color: var(--text);
+}

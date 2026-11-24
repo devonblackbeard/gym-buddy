@@ -1,4 +1,4 @@
-import type { DaySummary, Exercise, NewSetInput, Session, SetEntry, SetInput } from "../../shared/types";
+import type { DaySummary, Exercise, NewSetInput, Session, SetEntry, SetInput, StepDay } from "../../shared/types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -31,6 +31,8 @@ export const api = {
   addSet: (input: NewSetInput) => request<SetEntry>("/sets", send("POST", input)),
   updateSet: (id: number, input: SetInput) => request<SetEntry>(`/sets/${id}`, send("PATCH", input)),
   deleteSet: (id: number) => request<void>(`/sets/${id}`, send("DELETE")),
+  steps: (from: string, to: string) =>
+    request<StepDay[]>(`/steps?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
 };
 
 export const errorMessage = (error: unknown) =>

@@ -32,6 +32,8 @@ There is no test suite and no linter. `npm run typecheck` is the correctness gat
 
 **Data model.** There is one `workouts` row per calendar day (`performed_on date UNIQUE`). It is created implicitly by the upsert CTE in `createSet`, and the API never creates or deletes workouts directly. Each `sets` row references a workout and an exercise, both `ON DELETE CASCADE`. Exercise names are unique case-insensitively (`lower(name)` index). `POST /exercises` returns the existing row on a name conflict instead of an error.
 
+**Steps from Apple Health.** HealthKit has no web API, so an iOS Shortcut POSTs daily totals to `/api/steps` (setup: `docs/apple-health-steps.md`). Writes require `Authorization: Bearer $STEPS_TOKEN` (a Netlify env var, read with `Netlify.env.get`); reads are open like the rest of the API. `daily_steps` has one row per day, and each POST replaces that day's total. `StepsCard` on the Workout screen shows it and hides itself when there is no data for the week.
+
 **Dates are local-day strings.** Days are always `"YYYY-MM-DD"` in the user's local time. Use the helpers in `src/lib/dates.ts` (`todayISO`, `fromISO`, `shiftDate`). Don't use `new Date("YYYY-MM-DD")` or `toISOString()`, which shift days in UTC.
 
 **Frontend state.** There is no router and no state library:

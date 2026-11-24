@@ -1,6 +1,6 @@
 import type { Config } from "@netlify/functions";
 import { db, ensureSchema } from "../lib/db";
-import type { DaySummary, Exercise, Session, SetEntry, Unit } from "../../shared/types";
+import type { DaySummary, Exercise, Session, SetEntry, StepDay, Unit } from "../../shared/types";
 
 // Single function serving every /api/* route.
 //
@@ -13,6 +13,10 @@ import type { DaySummary, Exercise, Session, SetEntry, Unit } from "../../shared
 //   POST   /api/sets                     { date, exerciseId, reps, weight, unit }
 //   PATCH  /api/sets/:id                 { reps, weight, unit }
 //   DELETE /api/sets/:id
+//   GET    /api/steps?from=&to=          daily step totals in a date range (inclusive)
+//   POST   /api/steps                    { date, steps } or [{ date, steps }, ...]
+//                                        needs "Authorization: Bearer $STEPS_TOKEN";
+//                                        sent by an iOS Shortcut reading Apple Health
 
 class HttpError extends Error {
   constructor(
@@ -65,6 +69,13 @@ function parseName(value: unknown): string {
   const name = typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
   if (name.length > 0 && name.length <= 80) return name;
   throw new HttpError(400, "Exercise name must be 1–80 characters");
+}
+
+function parseSteps(value: unknown): number {
+  // iOS Shortcuts may send the sum as a decimal or as a string.
+  const n = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+  if (typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1_000_000) return Math.round(n);
+  throw new HttpError(400, "Steps must be a number between 0 and 1,000,000");
 }
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
@@ -214,6 +225,52 @@ async function deleteSet(id: number) {
   return new Response(null, { status: 204 });
 }
 
+async function getSteps(url: URL) {
+  const from = parseDate(url.searchParams.get("from"));
+  const to = parseDate(url.searchParams.get("to"));
+  if (from > to) throw new HttpError(400, "Start date must be before end date");
+  const rows = await db()`
+    SELECT day::text AS date, steps
+      FROM daily_steps
+     WHERE day BETWEEN ${from} AND ${to}
+     ORDER BY day`;
+  return json(rows as StepDay[]);
+}
+
+function checkStepsToken(req: Request) {
+  const expected = Netlify.env.get("STEPS_TOKEN");
+  if (!expected) throw new HttpError(503, "Step syncing is not set up: add a STEPS_TOKEN environment variable");
+  const auth = req.headers.get("authorization") ?? "";
+  if (auth !== `Bearer ${expected}`) throw new HttpError(401, "Invalid or missing step sync token");
+}
+
+async function saveSteps(req: Request) {
+  checkStepsToken(req);
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    throw new HttpError(400, "Expected a JSON body");
+  }
+  const items = Array.isArray(body) ? body : [body];
+  if (items.length === 0 || items.length > 400) throw new HttpError(400, "Send between 1 and 400 days at once");
+  const days = new Map<string, number>();
+  for (const item of items) {
+    if (!item || typeof item !== "object") throw new HttpError(400, "Each entry must be { date, steps }");
+    const { date, steps } = item as Record<string, unknown>;
+    days.set(parseDate(date), parseSteps(steps));
+  }
+  // Each sync carries the day's running total, so the latest value replaces the old one.
+  const rows = await db().query(
+    `INSERT INTO daily_steps (day, steps)
+     SELECT * FROM unnest($1::date[], $2::int[])
+     ON CONFLICT (day) DO UPDATE SET steps = EXCLUDED.steps, updated_at = now()
+     RETURNING day::text AS date, steps`,
+    [[...days.keys()], [...days.values()]],
+  );
+  return json(rows as StepDay[]);
+}
+
 // ---- router ----------------------------------------------------------------
 
 async function route(req: Request, url: URL): Promise<Response> {
@@ -242,6 +299,11 @@ async function route(req: Request, url: URL): Promise<Response> {
       if (method === "PATCH") return updateSet(id, req);
       if (method === "DELETE") return deleteSet(id);
     }
+  }
+
+  if (resource === "steps" && !rawId) {
+    if (method === "GET") return getSteps(url);
+    if (method === "POST") return saveSteps(req);
   }
 
   throw new HttpError(404, "Not found");

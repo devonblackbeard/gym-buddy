@@ -36,6 +36,12 @@ const SCHEMA = [
    )`,
   `CREATE INDEX IF NOT EXISTS sets_workout_id_idx ON sets (workout_id)`,
   `CREATE INDEX IF NOT EXISTS sets_exercise_id_idx ON sets (exercise_id)`,
+  // Daily step totals pushed from Apple Health by an iOS Shortcut (POST /api/steps).
+  `CREATE TABLE IF NOT EXISTS daily_steps (
+     day         date PRIMARY KEY,
+     steps       integer NOT NULL CHECK (steps >= 0),
+     updated_at  timestamptz NOT NULL DEFAULT now()
+   )`,
 ];
 
 let schemaReady: Promise<void> | null = null;

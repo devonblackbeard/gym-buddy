@@ -45,3 +45,9 @@ export interface Session {
   date: string;
   sets: { id: number; reps: number; weight: number; unit: Unit }[];
 }
+
+/** Total steps for one day, as synced from Apple Health. */
+export interface StepDay {
+  date: string;
+  steps: number;
+}

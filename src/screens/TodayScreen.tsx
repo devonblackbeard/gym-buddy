@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, type TouchEvent } from "react";
 import type { ExerciseRef, SetEntry, Unit } from "../../shared/types";
 import { ChevronLeft, ChevronRight, Dumbbell, Plus } from "../components/Icons";
 import { LogSheet, type LogTarget } from "../components/LogSheet";
+import { StepsCard } from "../components/StepsCard";
 import { api } from "../lib/api";
 import { dayLabel, fromISO, shiftDate, todayISO } from "../lib/dates";
 import { fmtWeight } from "../lib/format";
@@ -89,6 +90,8 @@ export function TodayScreen({ date, onDateChange, unit, onUnitChange, onOpenExer
       </header>
 
       <main className="screen" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <StepsCard date={date} />
+
         {error && (
           <div className="inline-error">
             {error} <button className="link-btn" onClick={reload}>Retry</button>
