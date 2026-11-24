@@ -1,3 +1,4 @@
+// Shows the day's step total from Apple Health; see docs/apple-health-steps.md for setup.
 import { api } from "../lib/api";
 import { fromISO, shiftDate } from "../lib/dates";
 import { useLoad } from "../lib/hooks";
