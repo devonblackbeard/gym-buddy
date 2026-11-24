@@ -1,52 +1,20 @@
-import { neon } from "@netlify/neon";
+import { getDatabase, type DatabaseConnection } from "@netlify/database";
 
-type Sql = ReturnType<typeof neon>;
+// Netlify Database picks the right driver and connection for wherever this runs:
+// the local Postgres under `netlify dev`, a preview branch, or production.
+// The schema lives in netlify/database/migrations and is applied by Netlify on deploy.
 
-let client: Sql | null = null;
+let connection: DatabaseConnection | null = null;
 
-/** Lazily created so a missing NETLIFY_DATABASE_URL surfaces as a request error, not a crash on import. */
-export function db(): Sql {
-  client ??= neon();
-  return client;
+function database(): DatabaseConnection {
+  connection ??= getDatabase();
+  return connection;
 }
 
-// Idempotent schema. Runs once per function instance (cold start) in a single round trip,
-// so there is no separate migration step to remember before the first deploy.
-const SCHEMA = [
-  `CREATE TABLE IF NOT EXISTS exercises (
-     id          serial PRIMARY KEY,
-     name        text NOT NULL CHECK (length(trim(name)) > 0),
-     created_at  timestamptz NOT NULL DEFAULT now()
-   )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS exercises_name_lower_key ON exercises (lower(name))`,
-  `CREATE TABLE IF NOT EXISTS workouts (
-     id            serial PRIMARY KEY,
-     performed_on  date NOT NULL UNIQUE,
-     notes         text,
-     created_at    timestamptz NOT NULL DEFAULT now()
-   )`,
-  `CREATE TABLE IF NOT EXISTS sets (
-     id           serial PRIMARY KEY,
-     workout_id   integer NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
-     exercise_id  integer NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
-     reps         integer NOT NULL CHECK (reps >= 0),
-     weight       numeric(7,2) NOT NULL CHECK (weight >= 0),
-     unit         text NOT NULL DEFAULT 'lb' CHECK (unit IN ('lb', 'kg')),
-     created_at   timestamptz NOT NULL DEFAULT now()
-   )`,
-  `CREATE INDEX IF NOT EXISTS sets_workout_id_idx ON sets (workout_id)`,
-  `CREATE INDEX IF NOT EXISTS sets_exercise_id_idx ON sets (exercise_id)`,
-];
+/** Tagged-template query: `await sql()\`SELECT ... WHERE id = ${id}\`` resolves to the rows. */
+export const sql = () => database().sql;
 
-let schemaReady: Promise<void> | null = null;
-
-export function ensureSchema(): Promise<void> {
-  schemaReady ??= (async () => {
-    const sql = db();
-    await sql.transaction(SCHEMA.map((statement) => sql.query(statement)));
-  })().catch((error) => {
-    schemaReady = null; // retry on the next request
-    throw error;
-  });
-  return schemaReady;
+/** Plain-text query with $1, $2 … placeholders, for SQL assembled from trusted fragments. */
+export function query<T>(text: string, params: unknown[] = []): Promise<T[]> {
+  return database().sql.unsafe(text, params as never[], { rowMode: "object" }) as Promise<T[]>;
 }

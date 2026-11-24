@@ -9,34 +9,36 @@ Built to be used from a phone browser, and installable to the home screen so it 
 |----------|------|
 | Frontend | Vite + React + TypeScript (`src/`) |
 | API      | One Netlify Function serving `/api/*` (`netlify/functions/api.ts`) |
-| Database | [Netlify DB](https://docs.netlify.com/build/data-and-storage/netlify-db/) (managed Postgres by Neon) via `@netlify/neon` |
+| Database | [Netlify Database](https://docs.netlify.com/build/data-and-storage/netlify-database/) (managed Postgres) via `@netlify/database` |
 
-The schema (`exercises`, `workouts`, `sets`) is in `netlify/lib/db.ts` and is created automatically on the
-first API request, so there's no separate migration step.
+The schema (`exercises`, `workouts`, `sets`) lives in SQL migrations under `netlify/database/migrations/`.
+Netlify provisions the database and applies pending migrations automatically on every deploy.
+
+## Develop
+
+`netlify dev` runs a **local** Postgres (separate from production). Apply migrations to it once, and again
+whenever you add a migration:
+
+```sh
+npm install
+npm run db:migrate        # apply migrations to the local database
+npm run dev               # app + functions + database at http://localhost:8888
+```
+
+Other database commands: `npm run db:status`, `npx netlify database reset` (wipe local data),
+`npm run db:new -- -d "add notes column"` (create a migration; never edit one that's already applied).
+
+`npm run dev:ui` runs only the Vite frontend (API calls will fail without `netlify dev`).
 
 ## Deploy
 
 ```sh
-npm install
-npx netlify login
-npx netlify init          # create/link the Netlify site
-npx netlify db init       # provision the Postgres database (sets NETLIFY_DATABASE_URL)
+npx netlify deploy        # preview deploy, gets its own database branch
 npx netlify deploy --prod
 ```
 
 Or connect the GitHub repo in the Netlify UI: build command `npm run build`, publish directory `dist`
 (both already set in `netlify.toml`).
-
-> **Claim your database.** Netlify DB databases start out unclaimed and expire unless you claim them into a
-> (free) Neon account. Do that from the site's **Extensions → Neon** page in the Netlify dashboard.
-
-## Develop
-
-```sh
-npx netlify dev           # app + functions + database at http://localhost:8888
-```
-
-`npm run dev:ui` runs only the Vite frontend (API calls will fail without `netlify dev`).
 
 ## Install on your phone
 

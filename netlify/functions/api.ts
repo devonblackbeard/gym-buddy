@@ -1,5 +1,5 @@
 import type { Config } from "@netlify/functions";
-import { db, ensureSchema } from "../lib/db";
+import { query, sql } from "../lib/db";
 import type { DaySummary, Exercise, Session, SetEntry, Unit } from "../../shared/types";
 
 // Single function serving every /api/* route.
@@ -77,8 +77,13 @@ async function readBody(req: Request): Promise<Record<string, unknown>> {
   throw new HttpError(400, "Expected a JSON object body");
 }
 
+/** Postgres error code (e.g. 23503 = foreign key violation), also when wrapped by the driver. */
 function pgCode(error: unknown): string | undefined {
-  return typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined;
+  for (let e = error, depth = 0; e && typeof e === "object" && depth < 3; depth++) {
+    if ("code" in e && typeof e.code === "string") return e.code;
+    e = "cause" in e ? e.cause : undefined;
+  }
+  return undefined;
 }
 
 // ---- handlers --------------------------------------------------------------
@@ -88,7 +93,7 @@ const SET_COLUMNS = `s.id, s.exercise_id AS "exerciseId", e.name AS "exerciseNam
 
 async function getDay(url: URL) {
   const date = parseDate(url.searchParams.get("date"));
-  const rows = await db().query(
+  const rows = await query(
     `SELECT ${SET_COLUMNS}
        FROM sets s
        JOIN workouts w ON w.id = s.workout_id
@@ -101,7 +106,7 @@ async function getDay(url: URL) {
 }
 
 async function getHistory() {
-  const rows = await db()`
+  const rows = await sql()`
     SELECT w.performed_on::text AS date,
            count(s.id)::int AS sets,
            array_agg(DISTINCT e.name ORDER BY e.name) AS exercises
@@ -115,7 +120,7 @@ async function getHistory() {
 }
 
 async function listExercises() {
-  const rows = await db()`
+  const rows = await sql()`
     SELECT e.id, e.name,
            max(w.performed_on)::text AS "lastDone",
            count(s.id)::int AS "totalSets"
@@ -130,11 +135,11 @@ async function listExercises() {
 async function createExercise(req: Request) {
   const name = parseName((await readBody(req)).name);
   // Reuse an existing exercise with the same name (case-insensitive) instead of failing.
-  const [row] = await db()`
+  const [row] = await sql()`
     INSERT INTO exercises (name) VALUES (${name})
     ON CONFLICT ((lower(name))) DO UPDATE SET name = exercises.name
     RETURNING id, name`;
-  const [stats] = await db()`
+  const [stats] = await sql()`
     SELECT max(w.performed_on)::text AS "lastDone", count(s.id)::int AS "totalSets"
       FROM sets s JOIN workouts w ON w.id = s.workout_id
      WHERE s.exercise_id = ${row.id}`;
@@ -142,13 +147,13 @@ async function createExercise(req: Request) {
 }
 
 async function deleteExercise(id: number) {
-  const rows = await db()`DELETE FROM exercises WHERE id = ${id} RETURNING id`;
+  const rows = await sql()`DELETE FROM exercises WHERE id = ${id} RETURNING id`;
   if (rows.length === 0) throw new HttpError(404, "Exercise not found");
   return new Response(null, { status: 204 });
 }
 
 async function exerciseSessions(id: number) {
-  const rows = await db()`
+  const rows = await sql()`
     SELECT w.performed_on::text AS date, s.id, s.reps, s.weight::float8 AS weight, s.unit
       FROM sets s
       JOIN workouts w ON w.id = s.workout_id
@@ -172,7 +177,7 @@ async function createSet(req: Request) {
   const weight = parseWeight(body.weight);
   const unit = parseUnit(body.unit);
   try {
-    const rows = await db().query(
+    const rows = await query(
       `WITH w AS (
          INSERT INTO workouts (performed_on) VALUES ($1)
          ON CONFLICT (performed_on) DO UPDATE SET performed_on = EXCLUDED.performed_on
@@ -187,7 +192,8 @@ async function createSet(req: Request) {
     );
     return json(rows[0] as SetEntry, 201);
   } catch (error) {
-    if (pgCode(error) === "23503") throw new HttpError(404, "Exercise not found");
+    // 422 rather than 404: the URL is fine, the referenced exercise in the body isn't.
+    if (pgCode(error) === "23503") throw new HttpError(422, "Exercise not found");
     throw error;
   }
 }
@@ -197,7 +203,7 @@ async function updateSet(id: number, req: Request) {
   const reps = parseReps(body.reps);
   const weight = parseWeight(body.weight);
   const unit = parseUnit(body.unit);
-  const rows = await db().query(
+  const rows = await query(
     `WITH s AS (
        UPDATE sets SET reps = $2, weight = $3, unit = $4 WHERE id = $1 RETURNING *
      )
@@ -209,7 +215,7 @@ async function updateSet(id: number, req: Request) {
 }
 
 async function deleteSet(id: number) {
-  const rows = await db()`DELETE FROM sets WHERE id = ${id} RETURNING id`;
+  const rows = await sql()`DELETE FROM sets WHERE id = ${id} RETURNING id`;
   if (rows.length === 0) throw new HttpError(404, "Set not found");
   return new Response(null, { status: 204 });
 }
@@ -249,7 +255,6 @@ async function route(req: Request, url: URL): Promise<Response> {
 
 export default async (req: Request) => {
   try {
-    await ensureSchema();
     return await route(req, new URL(req.url));
   } catch (error) {
     if (error instanceof HttpError) return json({ error: error.message }, error.status);
