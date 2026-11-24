@@ -12,7 +12,15 @@ import { Stepper } from "./Stepper";
 /** What the sheet was opened for. */
 export type LogTarget =
   | { kind: "new" }
-  | { kind: "add"; exercise: ExerciseRef; setNumber: number; prefill?: SetInput }
+  | {
+      kind: "add";
+      exercise: ExerciseRef;
+      setNumber: number;
+      prefill?: SetInput;
+      /** From the day's routine: target reps to start from, and how many sets are planned. */
+      targetReps?: number | null;
+      targetSets?: number | null;
+    }
   | { kind: "edit"; set: SetEntry; setNumber: number };
 
 interface Props {
@@ -45,16 +53,18 @@ export function LogSheet({ target, date, unit, onUnitChange, onClose, onSaved, o
   }
 
   const setNumber = target.kind === "new" ? setsLoggedFor(exercise.id) + 1 : target.setNumber;
+  const ofTarget = target.kind === "add" && target.targetSets ? ` of ${target.targetSets}` : "";
   return (
     <Sheet
       title={exercise.name}
-      subtitle={`${target.kind === "edit" ? "Editing set" : "Set"} ${setNumber} · ${dayLabel(date)}`}
+      subtitle={`${target.kind === "edit" ? "Editing set" : "Set"} ${setNumber}${ofTarget} · ${dayLabel(date)}`}
       onClose={onClose}
     >
       <SetForm
         exercise={exercise}
         date={date}
         editing={target.kind === "edit" ? target.set : undefined}
+        targetReps={target.kind === "add" ? (target.targetReps ?? undefined) : undefined}
         prefill={target.kind === "add" ? target.prefill : target.kind === "edit" ? target.set : undefined}
         unit={unit}
         onUnitChange={onUnitChange}
@@ -76,16 +86,28 @@ interface FormProps {
   date: string;
   editing?: SetEntry;
   prefill?: SetInput;
+  /** Routine target, used for reps when there's no prefill. */
+  targetReps?: number;
   unit: Unit;
   onUnitChange: (unit: Unit) => void;
   onDone: (set: SetEntry) => void;
   onDeleted: (id: number) => void;
 }
 
-function SetForm({ exercise, date, editing, prefill, unit: preferredUnit, onUnitChange, onDone, onDeleted }: FormProps) {
+function SetForm({
+  exercise,
+  date,
+  editing,
+  prefill,
+  targetReps,
+  unit: preferredUnit,
+  onUnitChange,
+  onDone,
+  onDeleted,
+}: FormProps) {
   const [unit, setUnit] = useState<Unit>(prefill?.unit ?? preferredUnit);
   const [weight, setWeight] = useState(prefill?.weight ?? defaultWeight(preferredUnit));
-  const [reps, setReps] = useState(prefill?.reps ?? 8);
+  const [reps, setReps] = useState(prefill?.reps ?? targetReps ?? 8);
   const [busy, setBusy] = useState(false);
   const [lastTime, setLastTime] = useState<{ date: string; sets: SetInput[] } | null>(null);
   const touched = useRef(prefill !== undefined);
@@ -103,7 +125,7 @@ function SetForm({ exercise, date, editing, prefill, unit: preferredUnit, onUnit
         if (!touched.current) {
           const last = previous.sets[previous.sets.length - 1];
           setWeight(last.weight);
-          setReps(last.reps);
+          setReps(targetReps ?? last.reps); // the routine's rep target wins over last time's reps
           setUnit(last.unit);
         }
       })
@@ -113,7 +135,7 @@ function SetForm({ exercise, date, editing, prefill, unit: preferredUnit, onUnit
     return () => {
       cancelled = true;
     };
-  }, [exercise.id, date]);
+  }, [exercise.id, date, targetReps]);
 
   const changeUnit = (next: Unit) => {
     touched.current = true;

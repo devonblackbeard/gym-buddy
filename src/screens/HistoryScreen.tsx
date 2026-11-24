@@ -49,10 +49,10 @@ export function HistoryScreen({ onOpenDay }: { onOpenDay: (date: string) => void
                         <strong>{d.getDate()}</strong>
                       </span>
                       <span className="row-main">
-                        <span className="row-title">{day.exercises.join(", ")}</span>
+                        <span className="row-title">{day.plan ?? day.exercises.join(", ")}</span>
                         <span className="row-sub">
-                          {day.exercises.length} exercise{day.exercises.length === 1 ? "" : "s"} · {day.sets} set
-                          {day.sets === 1 ? "" : "s"}
+                          {day.plan ? `${day.exercises.join(", ")} · ` : `${day.exercises.length} exercise${day.exercises.length === 1 ? "" : "s"} · `}
+                          {day.sets} set{day.sets === 1 ? "" : "s"}
                         </span>
                       </span>
                       <ChevronRight className="row-chevron" />

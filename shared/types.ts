@@ -38,6 +38,44 @@ export interface DaySummary {
   date: string;
   sets: number;
   exercises: string[];
+  /** "Push · Alpha" when the day followed a routine workout. */
+  plan: string | null;
+}
+
+// ---- routines ----------------------------------------------------------------
+
+/** One exercise slot in a routine workout, with optional targets. */
+export interface RoutineExercise {
+  exerciseId: number;
+  name: string;
+  targetSets: number | null;
+  targetReps: number | null;
+}
+
+export type RoutineExerciseInput = Omit<RoutineExercise, "name">;
+
+/** A named workout inside a routine, e.g. Push > Alpha. */
+export interface RoutineWorkout {
+  id: number;
+  routineId: number;
+  routineName: string;
+  name: string;
+  exercises: RoutineExercise[];
+}
+
+/** A routine such as Push, Pull or Legs. */
+export interface Routine {
+  id: number;
+  name: string;
+  workouts: RoutineWorkout[];
+}
+
+/** Everything the Workout tab needs for one date. */
+export interface Day {
+  date: string;
+  /** The routine workout this day follows, if one was chosen. */
+  plan: RoutineWorkout | null;
+  sets: SetEntry[];
 }
 
 /** All sets of one exercise on one day. */

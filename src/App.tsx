@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
 import type { ExerciseRef } from "../shared/types";
-import { Clock, Dumbbell, List } from "./components/Icons";
+import { Clock, Dumbbell, Layers, List } from "./components/Icons";
+import { api } from "./lib/api";
 import { todayISO } from "./lib/dates";
 import { useUnit } from "./lib/hooks";
 import { onToast, type ToastMessage } from "./lib/toast";
 import { ExerciseDetail } from "./screens/ExerciseDetail";
 import { ExercisesScreen } from "./screens/ExercisesScreen";
 import { HistoryScreen } from "./screens/HistoryScreen";
+import { RoutinesScreen } from "./screens/RoutinesScreen";
+import { RoutineWorkoutEditor } from "./screens/RoutineWorkoutEditor";
 import { TodayScreen } from "./screens/TodayScreen";
 
-type Tab = "today" | "history" | "exercises";
+type Tab = "today" | "routines" | "history" | "exercises";
 
 const TABS: { id: Tab; label: string; Icon: typeof Dumbbell }[] = [
   { id: "today", label: "Workout", Icon: Dumbbell },
+  { id: "routines", label: "Routines", Icon: Layers },
   { id: "history", label: "History", Icon: Clock },
   { id: "exercises", label: "Exercises", Icon: List },
 ];
@@ -22,6 +26,7 @@ export default function App() {
   const [date, setDate] = useState(todayISO);
   const [unit, setUnit] = useUnit();
   const [detail, setDetail] = useState<ExerciseRef | null>(null);
+  const [editingWorkoutId, setEditingWorkoutId] = useState<number | null>(null);
   const [refresh, setRefresh] = useState(0);
 
   const openDay = (d: string) => {
@@ -46,8 +51,10 @@ export default function App() {
             unit={unit}
             onUnitChange={setUnit}
             onOpenExercise={setDetail}
+            onGoToRoutines={() => setTab("routines")}
           />
         )}
+        {tab === "routines" && <RoutinesScreen onOpenWorkout={setEditingWorkoutId} />}
         {tab === "history" && <HistoryScreen onOpenDay={openDay} />}
         {tab === "exercises" && <ExercisesScreen onOpenExercise={setDetail} />}
       </div>
@@ -65,6 +72,25 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      {editingWorkoutId !== null && (
+        <RoutineWorkoutEditor
+          key={editingWorkoutId}
+          routineWorkoutId={editingWorkoutId}
+          onClose={() => {
+            setEditingWorkoutId(null);
+            setRefresh((r) => r + 1); // routine list may have changed
+          }}
+          onStart={async () => {
+            const today = todayISO();
+            await api.setDayPlan(today, editingWorkoutId);
+            setEditingWorkoutId(null);
+            setDate(today);
+            setTab("today");
+            setRefresh((r) => r + 1);
+          }}
+        />
+      )}
 
       {detail && (
         <ExerciseDetail

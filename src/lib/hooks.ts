@@ -1,27 +1,65 @@
 import { useEffect, useRef, useState } from "react";
 import type { Unit } from "../../shared/types";
 
+// Back-gesture handling for overlays (pages and sheets).
+//
+// While any overlay is open we keep exactly ONE extra history entry (the "trap"). Back pops it,
+// and we close the top overlay; if more remain open we re-arm the trap. When the last overlay is
+// closed from the UI, we remove the trap with history.back() — deferred a tick, so an overlay
+// that opens in the same update (e.g. a sheet handing off to a page) reuses it instead of racing it.
+const overlayStack: { close: () => void }[] = [];
+let trapArmed = false;
+let ignoreNextPop = false;
+let pendingRemoval: ReturnType<typeof setTimeout> | null = null;
+
+function armTrap() {
+  history.pushState({ overlayTrap: true }, "");
+  trapArmed = true;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("popstate", () => {
+    if (ignoreNextPop) {
+      ignoreNextPop = false; // our own history.back() removing the trap
+      return;
+    }
+    if (!trapArmed) return;
+    trapArmed = false;
+    overlayStack.pop()?.close();
+    if (overlayStack.length > 0) armTrap();
+  });
+}
+
 /**
- * While mounted, pushes a history entry so the phone's Back button / gesture
- * closes the overlay instead of leaving the app.
+ * While mounted, makes the phone's Back button / gesture close this overlay instead of
+ * leaving the app. Stacked overlays close top-first.
  */
 export function useBackToClose(onClose: () => void) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
   useEffect(() => {
-    const token = Math.random().toString(36).slice(2);
-    history.pushState({ overlay: token }, "");
-    let poppedByBack = false;
-    const onPop = () => {
-      poppedByBack = true;
-      closeRef.current();
-    };
-    window.addEventListener("popstate", onPop);
+    const entry = { close: () => closeRef.current() };
+    overlayStack.push(entry);
+    if (pendingRemoval !== null) {
+      clearTimeout(pendingRemoval); // reuse the trap that was about to be removed
+      pendingRemoval = null;
+    } else if (!trapArmed) {
+      armTrap();
+    }
+
     return () => {
-      window.removeEventListener("popstate", onPop);
-      // Closed from the UI: drop the entry we pushed.
-      if (!poppedByBack && history.state?.overlay === token) history.back();
+      const index = overlayStack.indexOf(entry);
+      if (index === -1) return; // already closed by Back
+      overlayStack.splice(index, 1);
+      if (overlayStack.length > 0 || !trapArmed || pendingRemoval !== null) return;
+      pendingRemoval = setTimeout(() => {
+        pendingRemoval = null;
+        if (overlayStack.length > 0 || !trapArmed) return;
+        trapArmed = false;
+        ignoreNextPop = true;
+        history.back();
+      }, 0);
     };
   }, []);
 }
