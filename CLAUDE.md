@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-lpGym Buddy is a mobile-first workout log (exercises, sets, reps, weight per day). It is meant to be used from a phone browser and installed to the home screen as a full-screen PWA. It's a Vite + React 19 + TypeScript SPA, with a single Netlify Function as the API and Netlify Database (managed Postgres via `@netlify/database`) for storage.
+Gym Buddy is a mobile-first workout log (exercises, sets, reps, weight per day). It is meant to be used from a phone browser and installed to the home screen as a full-screen PWA. It's a Vite + React 19 + TypeScript SPA, with a single Netlify Function as the API and Netlify Database (managed Postgres via `@netlify/database`) for storage.
 
 ## Commands
 

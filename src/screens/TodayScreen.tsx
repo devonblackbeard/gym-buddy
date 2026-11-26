@@ -253,11 +253,9 @@ export function TodayScreen({ date, onDateChange, unit, onUnitChange, onOpenExer
       {choosingPlan && (
         <PlanSheet
           date={date}
-          currentId={plan?.id ?? null}
           planLabel={plan ? `${plan.routineName} › ${plan.name}` : null}
           setCount={sets.length}
           onClose={() => setChoosingPlan(false)}
-          onChosen={(chosen) => setDay((prev: Day | null) => (prev ? { ...prev, plan: chosen } : prev))}
           onCleared={() => setDay({ date, plan: null, sets: [] })}
         />
       )}
@@ -318,27 +316,22 @@ function StartPanel({
 }
 
 /**
- * Switch which routine workout a day follows (logged sets are kept),
- * or delete the day's workout entirely.
+ * The day's workout menu: only deleting it. A day's workout is never switched in place;
+ * delete it first, then start another.
  */
 function PlanSheet({
   date,
-  currentId,
   planLabel,
   setCount,
   onClose,
-  onChosen,
   onCleared,
 }: {
   date: string;
-  currentId: number | null;
   planLabel: string | null;
   setCount: number;
   onClose: () => void;
-  onChosen: (plan: RoutineWorkout | null) => void;
   onCleared: () => void;
 }) {
-  const { data: routines, error, reload } = useLoad(api.routines, []);
   const [busy, setBusy] = useState(false);
 
   const deleteDay = async () => {
@@ -358,33 +351,7 @@ function PlanSheet({
   };
 
   return (
-    <Sheet title="Workout plan" subtitle={dayLabel(date)} onClose={onClose}>
-      {error && (
-        <div className="inline-error">
-          {error} <button className="link-btn" onClick={reload}>Retry</button>
-        </div>
-      )}
-      {!routines && !error && <RowSkeleton rows={3} />}
-      {routines && (
-        <RoutinePicker
-          routines={routines}
-          currentId={currentId}
-          disabled={busy}
-          freestyleLabel="Freestyle (no routine)"
-          onPick={async (id) => {
-            if (id === currentId) return onClose();
-            setBusy(true);
-            try {
-              onChosen(await api.setDayPlan(date, id));
-              haptic(15);
-              onClose();
-            } catch (e) {
-              toast(errorMessage(e));
-              setBusy(false);
-            }
-          }}
-        />
-      )}
+    <Sheet title={planLabel ?? "Freestyle"} subtitle={dayLabel(date)} onClose={onClose}>
       <button className="btn btn-danger-text btn-wide delete-day" onClick={deleteDay} disabled={busy}>
         <Trash width={20} height={20} /> Delete this workout
       </button>

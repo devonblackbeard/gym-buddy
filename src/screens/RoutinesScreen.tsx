@@ -41,7 +41,7 @@ export function RoutinesScreen({ onOpenWorkout }: { onOpenWorkout: (routineWorko
           <div className="empty">
             <div className="empty-icon"><Layers width={36} height={36} /></div>
             <h2>Build your split</h2>
-            <p>Create routines like Push, Pull and Legs</p>
+            <p>Create routines like Push, Pull and Legs, then add custom workouts to each one</p>
             <button className="btn btn-primary" onClick={() => setSheet({ kind: "new-routine" })}>
               <Plus /> New routine
             </button>
