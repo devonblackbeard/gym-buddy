@@ -83,3 +83,10 @@ export interface Session {
   date: string;
   sets: { id: number; reps: number; weight: number; unit: Unit }[];
 }
+
+// ---- accounts ----------------------------------------------------------------
+
+export interface User {
+  id: number;
+  email: string;
+}

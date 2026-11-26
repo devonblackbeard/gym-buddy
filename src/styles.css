@@ -1227,7 +1227,7 @@ p {
 }
 
 .page .screen.editor-screen {
-  padding-bottom: calc(var(--safe-bottom) + 110px);
+  padding-bottom: calc(var(--safe-bottom) + 170px);
 }
 
 .plan-list {
@@ -1406,4 +1406,124 @@ p {
   font-size: 13px;
   color: var(--text-3);
   margin-top: 8px;
+}
+
+/* ---------- sign in ---------- */
+
+.auth {
+  flex: 1;
+  overflow-y: auto;
+  padding: calc(var(--safe-top) + 48px) 24px calc(var(--safe-bottom) + 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.auth-brand p {
+  color: var(--text-2);
+}
+
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.segmented button {
+  height: 40px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.segmented button.active {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.password-row {
+  position: relative;
+  display: flex;
+}
+
+.password-row .text-input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 72px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  padding: 0 16px;
+  text-decoration: none;
+  font-size: 15px;
+}
+
+.field-hint {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.topbar-end {
+  margin-left: auto;
+}
+
+.account-email {
+  font-size: 18px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.splash {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-2);
+}
+
+.footer-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.footer-actions .btn {
+  padding: 0 18px;
+}
+
+.footer-note {
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 14px;
+  text-align: center;
+}
+
+.footer-actions .btn:only-child {
+  flex: 1;
+}
+
+.btn-neutral {
+  min-width: 96px;
+  background: var(--surface-2);
+  color: var(--text);
 }

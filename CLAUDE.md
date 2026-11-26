@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Gym Buddy is a mobile-first workout log (exercises, sets, reps, weight per day). It is meant to be used from a phone browser and installed to the home screen as a full-screen PWA. It's a Vite + React 19 + TypeScript SPA, with a single Netlify Function as the API and Netlify DB (Neon Postgres via `@netlify/neon`) for storage.
+lpGym Buddy is a mobile-first workout log (exercises, sets, reps, weight per day). It is meant to be used from a phone browser and installed to the home screen as a full-screen PWA. It's a Vite + React 19 + TypeScript SPA, with a single Netlify Function as the API and Netlify Database (managed Postgres via `@netlify/database`) for storage.
 
 ## Commands
 
@@ -26,11 +26,13 @@ There is no test suite and no linter. `npm run typecheck` is the correctness gat
 - Validate every input with the `parseX()` helpers, which throw `HttpError(status, message)`. Those messages go straight to the user as toasts, so write them for the user.
 - Any other error is logged and returned as a generic 500.
 - Responses use `json()`, which sets `no-store`. Deletes return 204.
-- SQL uses the `db()` tagged template, or `db().query(text, params)` when the query string is built from `SET_COLUMNS`. Columns are aliased to camelCase in SQL (`AS "exerciseId"`), and `numeric` weights are cast with `::float8` so they arrive as JS numbers.
+- SQL uses the `sql()` tagged template, or `query(text, params)` for plain-text queries (for example when the string is built from `SET_COLUMNS`). Columns are aliased to camelCase in SQL (`AS "exerciseId"`), and `numeric` weights are cast with `::float8` so they arrive as JS numbers.
 
-**Schema without migrations.** `netlify/lib/db.ts` holds an idempotent `CREATE ... IF NOT EXISTS` list that `ensureSchema()` runs once per cold start, before every request. Schema changes must stay idempotent and additive: add new `IF NOT EXISTS` statements, or `ALTER ... ADD COLUMN IF NOT EXISTS`. Never edit existing statements and expect the change to apply, because tables in deployed databases already exist.
+**Schema via migrations.** SQL migrations in `netlify/database/migrations/` (Netlify Database, `@netlify/database`) are applied automatically on deploy, and locally with `npm run db:migrate`. Never edit an applied migration; add a new one (`npm run db:new`). `netlify/lib/db.ts` exposes `sql()` (tagged template) and `query(text, params)`.
 
-**Data model.** There is one `workouts` row per calendar day (`performed_on date UNIQUE`). It is created implicitly by the upsert CTE in `createSet`, and the API never creates or deletes workouts directly. Each `sets` row references a workout and an exercise, both `ON DELETE CASCADE`. Exercise names are unique case-insensitively (`lower(name)` index). `POST /exercises` returns the existing row on a name conflict instead of an error.
+**Accounts.** Email + password, implemented in `netlify/lib/auth.ts`: scrypt password hashes, a random session token in an HttpOnly `gb_session` cookie (the `sessions` table stores only its SHA-256), sliding 180-day sessions, and a per-email limit on failed sign-ins. `/api/auth/*` is the only part of the API that works signed out. Every other handler gets `uid` from `requireUser()` and must scope every query to it: `exercises`, `workouts` and `routines` have a `user_id`, and `sets`, `routine_workouts` and `routine_workout_exercises` belong to a user through those, so join to the owning table. Any id that arrives in a request body, such as an `exerciseId`, must also be checked for ownership. Rows with `user_id NULL` predate accounts and are claimed by the first sign-up. On the client, any 401 outside `/auth/` fires `onSignedOut` (`src/lib/api.ts`), and `App.tsx` then shows `AuthScreen`.
+
+**Data model.** There is one `workouts` row per user per calendar day (unique `(user_id, performed_on)`). It is created implicitly by the upsert CTE in `createSet`, and the API never creates or deletes workouts directly. Each `sets` row references a workout and an exercise, both `ON DELETE CASCADE`. Exercise names are unique case-insensitively (`lower(name)` index). `POST /exercises` returns the existing row on a name conflict instead of an error.
 
 **Dates are local-day strings.** Days are always `"YYYY-MM-DD"` in the user's local time. Use the helpers in `src/lib/dates.ts` (`todayISO`, `fromISO`, `shiftDate`). Don't use `new Date("YYYY-MM-DD")` or `toISOString()`, which shift days in UTC.
 
@@ -46,5 +48,4 @@ There is no test suite and no linter. `npm run typecheck` is the correctness gat
 
 ## Caveats
 
-- There is no authentication: anyone with the URL can read and write all data.
-- Netlify DB databases expire unless claimed into a Neon account (Netlify dashboard → Extensions → Neon).
+- There's no password reset or email verification yet. Both need an email-sending service.

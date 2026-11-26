@@ -1,4 +1,5 @@
 import type { DaySummary } from "../../shared/types";
+import { AccountButton } from "../components/Account";
 import { RowSkeleton } from "../components/ExercisePicker";
 import { ChevronRight, Clock } from "../components/Icons";
 import { api } from "../lib/api";
@@ -20,6 +21,7 @@ export function HistoryScreen({ onOpenDay }: { onOpenDay: (date: string) => void
     <>
       <header className="topbar">
         <h1 className="title">History</h1>
+        <AccountButton />
       </header>
       <main className="screen">
         {error && (

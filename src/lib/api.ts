@@ -9,7 +9,25 @@ import type {
   Session,
   SetEntry,
   SetInput,
+  User,
 } from "../../shared/types";
+
+const SIGNED_OUT = "app:signed-out";
+
+/** Fires when the server says the session is gone (expired, or signed out elsewhere). */
+export function onSignedOut(listener: () => void) {
+  window.addEventListener(SIGNED_OUT, listener);
+  return () => window.removeEventListener(SIGNED_OUT, listener);
+}
+
+export class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -23,7 +41,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
+  if (res.status === 401 && !path.startsWith("/auth/")) window.dispatchEvent(new Event(SIGNED_OUT));
+  if (!res.ok) throw new HttpError(res.status, body?.error ?? `Request failed (${res.status})`);
   return body as T;
 }
 
@@ -33,9 +52,27 @@ const send = (method: string, body?: unknown): RequestInit => ({
 });
 
 export const api = {
+  /** The signed-in user, or null when signed out. Throws when offline. */
+  me: () =>
+    request<{ user: User }>("/auth/me").then(
+      (r) => r.user,
+      (e: unknown) => {
+        if (e instanceof HttpError && e.status === 401) return null;
+        throw e;
+      },
+    ),
+  signUp: (email: string, password: string) =>
+    request<{ user: User }>("/auth/signup", send("POST", { email, password })).then((r) => r.user),
+  signIn: (email: string, password: string) =>
+    request<{ user: User }>("/auth/login", send("POST", { email, password })).then((r) => r.user),
+  signOut: () => request<void>("/auth/logout", send("POST")),
+
   day: (date: string) => request<Day>(`/day?date=${encodeURIComponent(date)}`),
   setDayPlan: (date: string, routineWorkoutId: number | null) =>
     request<RoutineWorkout | null>("/day", send("PUT", { date, routineWorkoutId })),
+  /** Start a routine workout on a day that has nothing yet; fails (409) instead of replacing one. */
+  startDay: (date: string, routineWorkoutId: number) =>
+    request<RoutineWorkout>("/day", send("PUT", { date, routineWorkoutId, onlyIfEmpty: true })),
   deleteDay: (date: string) => request<void>(`/day?date=${encodeURIComponent(date)}`, send("DELETE")),
   history: () => request<DaySummary[]>("/history"),
 

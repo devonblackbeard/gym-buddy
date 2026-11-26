@@ -308,7 +308,7 @@ function StartPanel({
           <Layers />
           <span>
             <strong>Set up routines</strong>
-            <span>Create Push / Pull / Legs with workouts like Push › Alpha to start them here in one tap.</span>
+            <span>Create Push / Pull / Legs to start them here in one tap.</span>
           </span>
           <ChevronRight className="row-chevron" />
         </button>

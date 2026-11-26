@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Routine } from "../../shared/types";
+import { AccountButton } from "../components/Account";
 import { RowSkeleton } from "../components/ExercisePicker";
 import { ChevronRight, Layers, Pencil, Plus } from "../components/Icons";
 import { NameSheet } from "../components/NameSheet";
@@ -25,6 +26,7 @@ export function RoutinesScreen({ onOpenWorkout }: { onOpenWorkout: (routineWorko
     <>
       <header className="topbar">
         <h1 className="title">Routines</h1>
+        <AccountButton />
       </header>
 
       <main className="screen">
@@ -39,7 +41,7 @@ export function RoutinesScreen({ onOpenWorkout }: { onOpenWorkout: (routineWorko
           <div className="empty">
             <div className="empty-icon"><Layers width={36} height={36} /></div>
             <h2>Build your split</h2>
-            <p>Create routines like Push, Pull and Legs, then add workouts to each one, e.g. Push › Alpha.</p>
+            <p>Create routines like Push, Pull and Legs</p>
             <button className="btn btn-primary" onClick={() => setSheet({ kind: "new-routine" })}>
               <Plus /> New routine
             </button>

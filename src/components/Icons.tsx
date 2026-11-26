@@ -67,6 +67,13 @@ export const Layers = (p: P) => (
 export const Pencil = (p: P) => (
   <svg {...base(p)}><path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z" /></svg>
 );
+export const UserCircle = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="10" r="3" />
+    <path d="M6.2 18.4a7 7 0 0 1 11.6 0" />
+  </svg>
+);
 export const Trophy = (p: P) => (
   <svg {...base(p)}>
     <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4ZM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4" />

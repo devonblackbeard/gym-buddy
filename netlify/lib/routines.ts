@@ -1,11 +1,14 @@
 import type { Routine, RoutineExercise, RoutineExerciseInput, RoutineWorkout } from "../../shared/types";
-import { query, sql } from "./db";
-import { HttpError, json, noContent, parseId, parseName, parseTarget, pgCode, readBody } from "./http";
+import { query } from "./db";
+import { HttpError, json, noContent, parseName, parseId, parseTarget, pgCode, readBody } from "./http";
 
 // Routines (Push, Pull, Legs) → routine workouts (Alpha, Beta) → ordered exercises with optional targets.
+// Every function takes the signed-in user's id; routines belong to a user, and everything below a
+// routine belongs to that routine's user.
 
 type ExerciseRow = RoutineExercise & { workoutId: number };
 
+/** Exercises of workouts the caller already scoped to the user. */
 async function exercisesFor(workoutIds: number[]): Promise<ExerciseRow[]> {
   if (workoutIds.length === 0) return [];
   return query<ExerciseRow>(
@@ -29,25 +32,29 @@ function attachExercises(
   }));
 }
 
-/** One routine workout with its routine name and exercises, or null if it doesn't exist. */
-export async function loadRoutineWorkout(id: number): Promise<RoutineWorkout | null> {
+/** One of the user's routine workouts with its routine name and exercises, or null. */
+export async function loadRoutineWorkout(uid: number, id: number): Promise<RoutineWorkout | null> {
   const [workout] = await query<Omit<RoutineWorkout, "exercises">>(
     `SELECT rw.id, rw.routine_id AS "routineId", r.name AS "routineName", rw.name
        FROM routine_workouts rw JOIN routines r ON r.id = rw.routine_id
-      WHERE rw.id = $1`,
-    [id],
+      WHERE rw.id = $1 AND r.user_id = $2`,
+    [id, uid],
   );
   if (!workout) return null;
   return attachExercises([workout], await exercisesFor([id]))[0];
 }
 
-export async function listRoutines() {
+export async function listRoutines(uid: number) {
   const [routines, workouts] = await Promise.all([
-    query<{ id: number; name: string }>(`SELECT id, name FROM routines ORDER BY position, id`),
+    query<{ id: number; name: string }>(`SELECT id, name FROM routines WHERE user_id = $1 ORDER BY position, id`, [
+      uid,
+    ]),
     query<Omit<RoutineWorkout, "exercises">>(
       `SELECT rw.id, rw.routine_id AS "routineId", r.name AS "routineName", rw.name
          FROM routine_workouts rw JOIN routines r ON r.id = rw.routine_id
+        WHERE r.user_id = $1
         ORDER BY rw.position, rw.id`,
+      [uid],
     ),
   ]);
   const full = attachExercises(workouts, await exercisesFor(workouts.map((w) => w.id)));
@@ -60,14 +67,14 @@ function duplicateName(error: unknown, message: string): never {
   throw error;
 }
 
-export async function createRoutine(req: Request) {
+export async function createRoutine(uid: number, req: Request) {
   const name = parseName((await readBody(req)).name, "Routine name");
   try {
     const [row] = await query<{ id: number; name: string }>(
-      `INSERT INTO routines (name, position)
-       VALUES ($1, (SELECT coalesce(max(position), -1) + 1 FROM routines))
+      `INSERT INTO routines (user_id, name, position)
+       VALUES ($1, $2, (SELECT coalesce(max(position), -1) + 1 FROM routines WHERE user_id = $1))
        RETURNING id, name`,
-      [name],
+      [uid, name],
     );
     return json({ ...row, workouts: [] } satisfies Routine, 201);
   } catch (error) {
@@ -75,10 +82,14 @@ export async function createRoutine(req: Request) {
   }
 }
 
-export async function renameRoutine(id: number, req: Request) {
+export async function renameRoutine(uid: number, id: number, req: Request) {
   const name = parseName((await readBody(req)).name, "Routine name");
   try {
-    const rows = await sql()`UPDATE routines SET name = ${name} WHERE id = ${id} RETURNING id`;
+    const rows = await query(`UPDATE routines SET name = $1 WHERE id = $2 AND user_id = $3 RETURNING id`, [
+      name,
+      id,
+      uid,
+    ]);
     if (rows.length === 0) throw new HttpError(404, "Routine not found");
     return noContent();
   } catch (error) {
@@ -86,30 +97,31 @@ export async function renameRoutine(id: number, req: Request) {
   }
 }
 
-export async function deleteRoutine(id: number) {
-  const rows = await sql()`DELETE FROM routines WHERE id = ${id} RETURNING id`;
+export async function deleteRoutine(uid: number, id: number) {
+  const rows = await query(`DELETE FROM routines WHERE id = $1 AND user_id = $2 RETURNING id`, [id, uid]);
   if (rows.length === 0) throw new HttpError(404, "Routine not found");
   return noContent();
 }
 
-export async function createRoutineWorkout(routineId: number, req: Request) {
+export async function createRoutineWorkout(uid: number, routineId: number, req: Request) {
   const name = parseName((await readBody(req)).name, "Workout name");
   try {
     const [row] = await query<{ id: number }>(
       `INSERT INTO routine_workouts (routine_id, name, position)
-       VALUES ($1, $2, (SELECT coalesce(max(position), -1) + 1 FROM routine_workouts WHERE routine_id = $1))
+       SELECT r.id, $2, (SELECT coalesce(max(position), -1) + 1 FROM routine_workouts WHERE routine_id = r.id)
+         FROM routines r WHERE r.id = $1 AND r.user_id = $3
        RETURNING id`,
-      [routineId, name],
+      [routineId, name, uid],
     );
-    return json(await loadRoutineWorkout(row.id), 201);
+    if (!row) throw new HttpError(422, "Routine not found");
+    return json(await loadRoutineWorkout(uid, row.id), 201);
   } catch (error) {
-    if (pgCode(error) === "23503") throw new HttpError(422, "Routine not found");
     duplicateName(error, `This routine already has a workout called “${name}”`);
   }
 }
 
-export async function getRoutineWorkout(id: number) {
-  const workout = await loadRoutineWorkout(id);
+export async function getRoutineWorkout(uid: number, id: number) {
+  const workout = await loadRoutineWorkout(uid, id);
   if (!workout) throw new HttpError(404, "Workout not found");
   return json(workout);
 }
@@ -135,16 +147,16 @@ function parseExerciseList(value: unknown): RoutineExerciseInput[] {
 }
 
 /** Rename and/or replace the ordered exercise list. Body: { name?, exercises? }. */
-export async function updateRoutineWorkout(id: number, req: Request) {
+export async function updateRoutineWorkout(uid: number, id: number, req: Request) {
   const body = await readBody(req);
   const name = body.name === undefined ? undefined : parseName(body.name, "Workout name");
   const exercises = body.exercises === undefined ? undefined : parseExerciseList(body.exercises);
 
-  if (!(await loadRoutineWorkout(id))) throw new HttpError(404, "Workout not found");
+  if (!(await loadRoutineWorkout(uid, id))) throw new HttpError(404, "Workout not found");
 
   if (name !== undefined) {
     try {
-      await sql()`UPDATE routine_workouts SET name = ${name} WHERE id = ${id}`;
+      await query(`UPDATE routine_workouts SET name = $1 WHERE id = $2`, [name, id]);
     } catch (error) {
       duplicateName(error, `This routine already has a workout called “${name}”`);
     }
@@ -157,27 +169,29 @@ export async function updateRoutineWorkout(id: number, req: Request) {
       target_sets: e.targetSets,
       target_reps: e.targetReps,
     }));
-    try {
-      // One statement, so the list is replaced atomically.
-      await query(
-        `WITH removed AS (DELETE FROM routine_workout_exercises WHERE routine_workout_id = $1)
-         INSERT INTO routine_workout_exercises (routine_workout_id, exercise_id, position, target_sets, target_reps)
-         SELECT $1, x.exercise_id, x.position, x.target_sets, x.target_reps
-           FROM jsonb_to_recordset($2::jsonb)
-             AS x(exercise_id int, position int, target_sets int, target_reps int)`,
-        [id, JSON.stringify(rows)],
-      );
-    } catch (error) {
-      if (pgCode(error) === "23503") throw new HttpError(422, "One of those exercises no longer exists");
-      throw error;
-    }
+    // One statement, so the list is replaced atomically. The join drops exercises that aren't the
+    // user's own (or were deleted meanwhile).
+    await query(
+      `WITH removed AS (DELETE FROM routine_workout_exercises WHERE routine_workout_id = $1)
+       INSERT INTO routine_workout_exercises (routine_workout_id, exercise_id, position, target_sets, target_reps)
+       SELECT $1, x.exercise_id, x.position, x.target_sets, x.target_reps
+         FROM jsonb_to_recordset($2::jsonb)
+           AS x(exercise_id int, position int, target_sets int, target_reps int)
+         JOIN exercises e ON e.id = x.exercise_id AND e.user_id = $3`,
+      [id, JSON.stringify(rows), uid],
+    );
   }
 
-  return json(await loadRoutineWorkout(id));
+  return json(await loadRoutineWorkout(uid, id));
 }
 
-export async function deleteRoutineWorkout(id: number) {
-  const rows = await sql()`DELETE FROM routine_workouts WHERE id = ${id} RETURNING id`;
+export async function deleteRoutineWorkout(uid: number, id: number) {
+  const rows = await query(
+    `DELETE FROM routine_workouts rw USING routines r
+      WHERE rw.id = $1 AND r.id = rw.routine_id AND r.user_id = $2
+      RETURNING rw.id`,
+    [id, uid],
+  );
   if (rows.length === 0) throw new HttpError(404, "Workout not found");
   return noContent();
 }

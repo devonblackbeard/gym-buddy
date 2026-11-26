@@ -5,6 +5,7 @@ import { ChevronDown, ChevronLeft, ChevronUp, Close, Minus, Pencil, Plus } from 
 import { NameSheet } from "../components/NameSheet";
 import { Sheet } from "../components/Sheet";
 import { api, errorMessage } from "../lib/api";
+import { todayISO } from "../lib/dates";
 import { haptic } from "../lib/format";
 import { useBackToClose, useLoad } from "../lib/hooks";
 import { toast } from "../lib/toast";
@@ -24,24 +25,30 @@ export function RoutineWorkoutEditor({ routineWorkoutId, onClose, onStart }: Pro
     [routineWorkoutId],
   );
   const [sheet, setSheet] = useState<"add" | "rename" | null>(null);
-  const [starting, setStarting] = useState(false);
+  const [busy, setBusy] = useState<"saving" | "starting" | null>(null);
+  // Starting is only offered when today has no workout yet, so it never replaces one.
+  const { data: today } = useLoad(() => api.day(todayISO()), []);
+  const todayTaken = today ? today.plan !== null || today.sets.length > 0 : null;
 
   // Debounced save of the exercise list so tapping steppers doesn't fire a request per tap.
   const pending = useRef<RoutineExercise[] | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
+  /** Saves pending changes now. Resolves to false if saving failed (already reported in a toast). */
   const flush = async () => {
     clearTimeout(timer.current);
     const list = pending.current;
-    if (!list) return;
+    if (!list) return true;
     pending.current = null;
     try {
       await api.updateRoutineWorkout(routineWorkoutId, {
         exercises: list.map(({ exerciseId, targetSets, targetReps }) => ({ exerciseId, targetSets, targetReps })),
       });
+      return true;
     } catch (e) {
       toast(errorMessage(e));
       reload();
+      return false;
     }
   };
 
@@ -67,14 +74,21 @@ export function RoutineWorkoutEditor({ routineWorkoutId, onClose, onStart }: Pro
   const patch = (index: number, changes: Partial<RoutineExercise>) =>
     update(exercises.map((e, i) => (i === index ? { ...e, ...changes } : e)));
 
+  /** Save now and go back to the routines list. */
+  const save = async () => {
+    setBusy("saving");
+    if (await flush()) onClose();
+    else setBusy(null);
+  };
+
   const start = async () => {
-    setStarting(true);
+    setBusy("starting");
     try {
-      await flush();
+      if (!(await flush())) return setBusy(null);
       await onStart();
     } catch (e) {
       toast(errorMessage(e));
-      setStarting(false);
+      setBusy(null);
     }
   };
 
@@ -163,11 +177,26 @@ export function RoutineWorkoutEditor({ routineWorkoutId, onClose, onStart }: Pro
         )}
       </main>
 
-      {workout && exercises.length > 0 && (
+      {workout && (
         <div className="page-footer">
-          <button className="btn btn-primary btn-wide" onClick={start} disabled={starting}>
-            {starting ? "Starting…" : "Start this workout today"}
-          </button>
+          {todayTaken && exercises.length > 0 && (
+            <p className="footer-note">
+              {today?.plan
+                ? `Today is already ${today.plan.routineName} › ${today.plan.name}.`
+                : "You've already logged a workout today."}{" "}
+              Delete it on the Workout tab to start this one instead.
+            </p>
+          )}
+          <div className="footer-actions">
+            <button className="btn btn-neutral" onClick={save} disabled={busy !== null}>
+              {busy === "saving" ? "Saving…" : "Save"}
+            </button>
+            {exercises.length > 0 && todayTaken === false && (
+              <button className="btn btn-primary btn-block" onClick={start} disabled={busy !== null}>
+                {busy === "starting" ? "Starting…" : "Start this workout today"}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
